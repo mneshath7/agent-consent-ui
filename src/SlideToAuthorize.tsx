@@ -11,6 +11,7 @@ import type {
   ActionProvider,
   AuthProvider,
 } from "./types";
+import { assertValidActionIntent, assertValidAuthorization } from "./security";
 
 export type SlideStage =
   | "idle"
@@ -69,6 +70,7 @@ export function SlideToAuthorize({
   const draggingRef = useRef(false);
   const dragXRef = useRef(0); // always-current value for pointer-up (avoids stale state)
   const pointerIdRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
 
   const labelId = useId();
   const statusId = useId();
@@ -81,6 +83,13 @@ export function SlideToAuthorize({
   const defaultLabel =
     labelIdle ??
     (intent.reversible ? "Slide to confirm" : "Slide to authorize");
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Measure track width for responsive layout
   useEffect(() => {
@@ -113,6 +122,7 @@ export function SlideToAuthorize({
   }, []);
 
   const reset = useCallback(() => {
+    draggingRef.current = false;
     dragXRef.current = 0;
     setDragX(0);
     setStage("idle");
@@ -120,10 +130,13 @@ export function SlideToAuthorize({
   }, []);
 
   const runAuthAndGrant = useCallback(async () => {
+    if (!mountedRef.current) return;
     setStage("authenticating");
     try {
+      assertValidActionIntent(intent);
       const available = await authProvider.isAvailable();
       if (!available) {
+        if (!mountedRef.current) return;
         setStage("error");
         onError?.(
           new Error("No trusted auth surface available on this device")
@@ -132,6 +145,7 @@ export function SlideToAuthorize({
       }
 
       const auth = await authProvider.authenticate(intent);
+      if (!mountedRef.current) return;
       if (!auth.success) {
         setStage("declined");
         onDeclined?.(auth.reason ?? "unknown");
@@ -140,9 +154,12 @@ export function SlideToAuthorize({
 
       setStage("requesting_grant");
       const grant = await actionProvider.requestAuthorization(intent, auth);
+      assertValidAuthorization(grant);
+      if (!mountedRef.current) return;
       setStage("success");
       onAuthorized(grant);
     } catch (err) {
+      if (!mountedRef.current) return;
       setStage("error");
       onError?.(err instanceof Error ? err : new Error(String(err)));
     }
@@ -158,7 +175,7 @@ export function SlideToAuthorize({
       draggingRef.current = true;
       pointerIdRef.current = e.pointerId;
       setStage("dragging");
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+      e.currentTarget.setPointerCapture?.(e.pointerId);
     },
     [canInteract]
   );
@@ -181,6 +198,15 @@ export function SlideToAuthorize({
       setDragX(x);
     },
     [maxDrag]
+  );
+
+  const handlePointerCancel = useCallback(
+    (e: React.PointerEvent) => {
+      if (!draggingRef.current) return;
+      if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) return;
+      reset();
+    },
+    [reset]
   );
 
   const handlePointerUp = useCallback(
@@ -233,9 +259,9 @@ export function SlideToAuthorize({
         : stage === "success"
           ? "Authorized"
           : stage === "declined"
-            ? "Declined — slide to retry"
+            ? "Declined — press Reset to retry"
             : stage === "error"
-              ? "Something went wrong — slide to retry"
+              ? "Something went wrong — press Reset to retry"
               : defaultLabel;
 
   const isBusy =
@@ -296,7 +322,7 @@ export function SlideToAuthorize({
         }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onKeyDown={handleKeyDown}
       >
         {/* Progress fill */}

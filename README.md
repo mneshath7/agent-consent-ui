@@ -253,7 +253,7 @@ npm install
 npm run dev
 ```
 
-Two scenarios (payment + file delete) share the same component and biometric gate. Uses the real platform authenticator when available; falls back gracefully otherwise.
+Two scenarios (payment + file delete) share the same component and biometric gate. The demo imports mock providers from the dedicated demo entry point; these providers are for local development only and must not be used in production.
 
 ---
 
@@ -274,7 +274,8 @@ Two scenarios (payment + file delete) share the same component and biometric gat
 | `WebAuthnProvider` | Production WebAuthn adapter |
 | `StripeSPTProvider` | Stripe Shared Payment Token example |
 | `DeleteActionProvider` | Non-payment ActionProvider example |
-| `DemoAuthProvider` / `DemoActionProvider` / `DemoTokenProvider` | Local demos only |
+| `assertValidActionIntent` / `assertValidAuthorization` | Defensive client-side validation helpers |
+| `@slide-to-pay/react/demo` — `DemoAuthProvider` / `DemoActionProvider` / `DemoTokenProvider` | Local demos only; not part of the default entry point |
 | Types: `ActionIntent`, `AuthProvider`, `ActionProvider`, `ActionAuthorization`, … | |
 
 ---
