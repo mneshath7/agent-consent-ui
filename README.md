@@ -1,51 +1,55 @@
-# slide-to-authorize
+# Agent Consent UI
 
-**A general confirmation primitive for anything an AI agent wants to do on your behalf that you can't easily take back.**
+A React and TypeScript confirmation primitive for consequential actions initiated by AI agents.
 
-Payments are the obvious first case — an agent proposes a purchase, you approve it. The same shape appears everywhere agents operate: sending an email as you, deleting a file, signing a document, sharing a credential, publishing something, cancelling a non-refundable booking.
+`agent-consent-ui` provides a deliberate slide interaction, a pluggable platform-authentication boundary, and action-specific authorization providers. It can be used for payments, file deletion, message sending, document signing, publishing, booking cancellation, deployments, and other actions that a user should explicitly approve.
 
-One gesture. One biometric gate. Pluggable per action. Drop the same component into any app that implements two small interfaces.
+> **Security principle:** the slider is only intent capture. It does not provide security by itself. Production authorization depends on a platform-owned authenticator and a server that independently verifies the exact intent before issuing a narrow grant.
+
+The current npm-compatible package name is `@slide-to-pay/react`. The repository uses the broader `agent-consent-ui` identity so the project is not limited to payments.
+
+## Features
+
+- Reusable `SlideToAuthorize` React component for consequential agent actions.
+- WebAuthn adapter for browser platform authenticators such as Face ID, Touch ID, and Windows Hello.
+- Pluggable `ActionProvider` contract for any backend grant or capability system.
+- Worked providers for delete actions and Stripe Shared Payment Token requests.
+- Deprecated `SlideToPay` compatibility wrapper for existing payment integrations.
+- Pointer, touch, and keyboard interaction with reduced-motion support.
+- Responsive track sizing through `ResizeObserver`.
+- Runtime validation for action intents, authentication results, and authorization grants.
+- Demo-only providers isolated behind `@slide-to-pay/react/demo`.
+- TypeScript declarations and an MIT license.
+
+## Installation
+
+### Install from npm
 
 ```bash
 npm install @slide-to-pay/react
 ```
 
----
+The package declares React and React DOM as peer dependencies. Your application should already provide React 18 or newer and React DOM 18 or newer.
 
-## Why this exists
+### Install directly from GitHub
 
-Most agent products today handle high-stakes approval with a **link-out** to a hosted page in another tab or app. That is a full context switch away from the conversation.
+The repository is available at [github.com/mneshath7/agent-consent-ui](https://github.com/mneshath7/agent-consent-ui). Until a release is published to npm, an application can install the repository directly:
 
-This library collapses the round-trip into two motions **inside the same surface**:
+```bash
+npm install github:mneshath7/agent-consent-ui
+```
 
-1. **Slide** — deliberate physical motion (not an accidental tap)
-2. **Face ID / Touch ID / Windows Hello** — platform-owned biometric the app cannot fake
+For production applications, prefer a tagged package release so dependency resolution is reproducible.
 
-No app switch. No separate tab. Same trust model whether you are authorizing a $118 grocery charge or the permanent deletion of a spreadsheet.
+## Quick start: general action authorization
 
----
-
-## The trust boundary (read this before integrating)
-
-This matters more than the gesture:
-
-| Layer | Responsibility | Security weight |
-|-------|----------------|-----------------|
-| `<SlideToAuthorize>` | UI only. Turns "approve" into a deliberate motion. | **Zero** |
-| `AuthProvider` | Platform authenticator (WebAuthn / LAContext / BiometricPrompt). Must be a surface the calling app **cannot draw itself**. | **The real boundary** |
-| `ActionProvider` | Exchanges successful auth for a **scoped, capped, single-use grant**. Never standing permission. | Issues the grant |
-
-If you are tempted to render your own "confirmed ✓" UI instead of calling a real platform authenticator, stop — that defeats the entire point.
-
----
-
-## Quick start — any action
+The following example authorizes a destructive file action. The UI displays the intent, invokes the configured authenticator after a completed slide, and then asks the action provider for a scoped grant.
 
 ```tsx
 import {
+  DeleteActionProvider,
   SlideToAuthorize,
   WebAuthnProvider,
-  DeleteActionProvider, // or your own ActionProvider
 } from "@slide-to-pay/react";
 
 const authProvider = new WebAuthnProvider({
@@ -57,7 +61,7 @@ const deleteProvider = new DeleteActionProvider({
   deleteEndpoint: "/api/actions/delete",
 });
 
-function ConfirmDelete() {
+export function ConfirmDelete() {
   return (
     <SlideToAuthorize
       intent={{
@@ -66,29 +70,39 @@ function ConfirmDelete() {
         consequence: "File permanently deleted",
         description: "Instinct wants to remove a duplicate spreadsheet.",
         reversible: false,
-        requestedBy: { agentName: "Instinct", agentId: "agent_instinct" },
+        requestedBy: {
+          agentName: "Instinct",
+          agentId: "agent_instinct",
+        },
       }}
       authProvider={authProvider}
       actionProvider={deleteProvider}
       onAuthorized={(grant) => {
-        // grant.grantId — single-resource, time-boxed delete permission
-        console.log("authorized", grant);
+        // Pass the narrow, expiring grant to the action executor.
+        console.log("authorized", grant.grantId, grant.scope);
       }}
-      onDeclined={(reason) => console.log("declined:", reason)}
+      onDeclined={(reason) => {
+        console.log("authorization declined", reason);
+      }}
+      onError={(error) => {
+        console.error("authorization error", error);
+      }}
     />
   );
 }
 ```
 
----
+A successful slide does not directly authorize the action. The component first calls `AuthProvider.authenticate()`, then calls `ActionProvider.requestAuthorization()` only when authentication succeeds.
 
-## Quick start — payments (Stripe Shared Payment Tokens)
+## Quick start: payment authorization
+
+`SlideToPay` is retained for compatibility with the original payment-only API. New integrations should generally use `SlideToAuthorize` with `kind: "payment"`, but this wrapper remains useful when an application already uses `PurchaseIntent` and `TokenProvider`.
 
 ```tsx
 import {
   SlideToPay,
-  WebAuthnProvider,
   StripeSPTProvider,
+  WebAuthnProvider,
 } from "@slide-to-pay/react";
 
 const authProvider = new WebAuthnProvider({
@@ -100,128 +114,376 @@ const tokenProvider = new StripeSPTProvider({
   spendRequestEndpoint: "/api/stripe/spend-request",
 });
 
-function ApproveCart() {
+export function ApproveCart() {
   return (
     <SlideToPay
       intent={{
         merchantId: "target_com",
         merchantName: "Target",
-        amount: 11879, // cents
+        amount: 11879,
         currency: "usd",
-        description: "Pasta night groceries — 21 items",
-        requestedBy: { agentName: "Instinct", agentId: "agent_instinct" },
+        description: "Pasta-night groceries — 21 items",
+        requestedBy: {
+          agentName: "Instinct",
+          agentId: "agent_instinct",
+        },
       }}
       authProvider={authProvider}
       tokenProvider={tokenProvider}
       onAuthorized={(token) => {
-        // token.tokenId is a Stripe SPT — never a card number
+        // token.tokenId is a scoped payment token, not a card number.
+        console.log("payment authorized", token.tokenId);
       }}
     />
   );
 }
 ```
 
-`<SlideToPay>` is a thin compatibility wrapper around `<SlideToAuthorize>`. Prefer the general component for new code.
+`amount` is represented in the smallest currency unit, such as cents for USD. The Stripe provider calls your backend; it never sends secret Stripe credentials from the browser.
 
----
+## Demo
 
-## Connecting multiple apps
+The demo presents two flows using the same authorization component: a Target grocery payment and an irreversible file deletion. The demo providers use simulated grants and a client-generated WebAuthn challenge for local illustration only.
 
-The component is deliberately dumb. Any app that can:
+From the repository root:
 
-1. Render React (or reimplement the slide gesture natively — see `NATIVE.md`)
-2. Implement `AuthProvider` (once, shared)
-3. Implement one or more `ActionProvider`s (per action kind)
-
-…can drop this in. The **same** `WebAuthnProvider` (or native biometric adapter) can sit behind payments in App A, file deletes in App B, and document signing in App C. The trust surface stays consistent; only the grant-issuing backend changes.
-
-```
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│   App A     │   │   App B     │   │   App C     │
-│  (payments) │   │  (deletes)  │   │  (signing)  │
-└──────┬──────┘   └──────┬──────┘   └──────┬──────┘
-       │                 │                 │
-       └────────────┬────┴─────────────────┘
-                    │
-           ┌────────▼────────┐
-           │  AuthProvider   │  ← WebAuthn / Face ID / Touch ID
-           │  (shared)       │
-           └────────┬────────┘
-                    │
-       ┌────────────┼────────────┐
-       ▼            ▼            ▼
-  StripeSPT    DeleteGrant   SignCapability
-  Provider     Provider      Provider
+```bash
+npm install
+cd examples/demo
+npm install
+npm run dev
 ```
 
----
+Then open the Vite URL shown in the terminal. The demo imports mock implementations directly from the source-level demo entry point. These mocks are intentionally excluded from the default production package export and must not be used in a real authorization flow.
 
-## Writing your own ActionProvider
+The demo can also be built for production:
+
+```bash
+cd examples/demo
+npm run build
+```
+
+## Architecture
+
+The package separates the consent experience into three layers.
+
+| Layer | Responsibility | Security meaning |
+|---|---|---|
+| `SlideToAuthorize` | Displays intent details and captures a deliberate gesture | UI only; zero security authority |
+| `AuthProvider` | Invokes a platform-owned authenticator | Human-presence and user-verification boundary |
+| `ActionProvider` | Exchanges successful authentication for a scoped grant | Backend-specific authorization decision |
+
+This allows several applications to share the same consent interaction and authentication contract while using different grant systems.
+
+```text
+Application A: payments ─┐
+Application B: deletes  ─┼─> shared AuthProvider ─> action-specific grant
+Application C: signing  ─┘       WebAuthn / native        Stripe / delete / signing
+```
+
+The package does not execute the action itself. The host application receives the grant and passes it to its own action executor or backend workflow.
+
+## API reference
+
+### `SlideToAuthorize`
+
+The primary component for all supported action kinds.
 
 ```ts
-import type { ActionProvider, ActionIntent, AuthResult, ActionAuthorization } from "@slide-to-pay/react";
+interface SlideToAuthorizeProps {
+  intent: ActionIntent;
+  authProvider: AuthProvider;
+  actionProvider: ActionProvider;
+  onAuthorized: (grant: ActionAuthorization) => void;
+  onDeclined?: (reason: string) => void;
+  onError?: (error: Error) => void;
+  labelIdle?: string;
+  labelAuthenticating?: string;
+  className?: string;
+  disabled?: boolean;
+}
+```
 
-class EmailSendProvider implements ActionProvider {
-  constructor(private opts: { endpoint: string }) {}
+The component has these stages:
+
+| Stage | Meaning |
+|---|---|
+| `idle` | Ready for a new authorization attempt |
+| `dragging` | The user is moving the thumb |
+| `authenticating` | The platform authenticator is being invoked |
+| `requesting_grant` | The action backend is issuing a grant |
+| `success` | A valid authorization grant was returned |
+| `declined` | The user or authenticator declined the request |
+| `error` | Availability, network, validation, or provider failure |
+
+A completed pointer gesture must reach the configured 92% threshold. Keyboard users can focus the control and press Space or Enter to invoke the same authorization flow.
+
+### `ActionIntent`
+
+```ts
+interface ActionIntent {
+  kind: ActionKind;
+  subject: string;
+  consequence: string;
+  description: string;
+  detail?: Array<{ label: string; value: string }>;
+  reversible: boolean;
+  requestedBy: {
+    agentName: string;
+    agentId: string;
+  };
+}
+
+type ActionKind =
+  | "payment"
+  | "send_message"
+  | "delete"
+  | "sign_document"
+  | "share_credential"
+  | "publish"
+  | "cancel_booking"
+  | (string & {});
+```
+
+The intent is used for display and is submitted to provider endpoints, but it must never be treated as authoritative by the backend. The server must independently verify or derive the action scope.
+
+### `AuthProvider`
+
+```ts
+interface AuthProvider {
+  isAvailable(): Promise<boolean>;
+  authenticate(intent: ActionIntent): Promise<AuthResult>;
+}
+
+interface AuthResult {
+  success: boolean;
+  assertion?: unknown;
+  reason?:
+    | "user_cancelled"
+    | "biometric_failed"
+    | "not_available"
+    | "error";
+}
+```
+
+The package includes `WebAuthnProvider`. Native applications can implement the interface with iOS `LAContext` or Android `BiometricPrompt`, as described in [NATIVE.md](./NATIVE.md).
+
+### `ActionProvider`
+
+```ts
+interface ActionProvider {
+  requestAuthorization(
+    intent: ActionIntent,
+    auth: AuthResult
+  ): Promise<ActionAuthorization>;
+}
+
+interface ActionAuthorization {
+  grantId: string;
+  scope: Record<string, unknown>;
+  expiresAt: number;
+}
+```
+
+A provider should return a single-use or otherwise tightly constrained grant. The package validates that the grant has a non-empty ID, an object scope, and a future expiration time. The backend remains responsible for enforcing those properties when the grant is consumed.
+
+### `WebAuthnProvider`
+
+```ts
+new WebAuthnProvider({
+  challengeEndpoint: string;
+  verifyEndpoint: string;
+  fetchOptions?: Omit<RequestInit, "method" | "body">;
+});
+```
+
+The provider performs the following sequence:
+
+1. POSTs the action intent to `challengeEndpoint`.
+2. Expects `{ publicKeyOptions, challengeId? }` from the server.
+3. Invokes `navigator.credentials.get({ publicKey: publicKeyOptions })`.
+4. Serializes the assertion’s binary fields to base64url.
+5. POSTs `{ credential, intent, challengeId? }` to `verifyEndpoint`.
+6. Expects `{ assertion }` after server-side verification.
+
+`fetchOptions` can be used for application-controlled credentials, headers, or an abort signal. The provider always controls the POST method and request body.
+
+### `DeleteActionProvider`
+
+```ts
+new DeleteActionProvider({
+  deleteEndpoint: string;
+});
+```
+
+The provider requires `intent.kind === "delete"` and sends the following shape to the configured backend:
+
+```json
+{
+  "subject": "Q3_financials_draft.xlsx",
+  "auth_assertion": "opaque-server-verified-assertion",
+  "requested_by": {
+    "agentName": "Instinct",
+    "agentId": "agent_instinct"
+  }
+}
+```
+
+The expected response is:
+
+```json
+{
+  "grant_id": "grant_123",
+  "resource_id": "resource_456",
+  "expires_at": 1770000000000
+}
+```
+
+The resulting grant scope is `{ resourceId, action: "delete" }`.
+
+### `StripeSPTProvider`
+
+```ts
+new StripeSPTProvider({
+  spendRequestEndpoint: string;
+});
+```
+
+The provider is used by the deprecated `SlideToPay` wrapper and sends payment details to your backend. The backend is expected to call Stripe with server-side credentials and return a token-shaped response:
+
+```json
+{
+  "id": "spt_123",
+  "usage_limits": {
+    "max_amount": 11879,
+    "currency": "usd"
+  },
+  "expires_at": 1770000000000
+}
+```
+
+The provider rejects missing authentication assertions, malformed responses, expired tokens, negative limits, and currency mismatches.
+
+### Runtime validation helpers
+
+The default package exports these defensive helpers:
+
+```ts
+assertValidActionIntent(intent);
+assertValidAuthorization(grant);
+assertSuccessfulAuth(auth);
+canonicalizeIntent(intent);
+assertSameIntent(expectedIntent, receivedIntent);
+```
+
+These helpers reduce accidental misuse in client code. They are not cryptographic signatures and do not replace server-side verification.
+
+### Demo-only entry point
+
+The unsafe local providers are available only from the explicit demo entry point:
+
+```ts
+import {
+  DemoAuthProvider,
+  DemoActionProvider,
+  DemoTokenProvider,
+} from "@slide-to-pay/react/demo";
+```
+
+Do not use these classes in production. They simulate grants and do not provide a real server-side authorization boundary.
+
+## Building a custom provider
+
+A custom provider can map the shared contract to any backend capability system.
+
+```ts
+import type {
+  ActionAuthorization,
+  ActionIntent,
+  ActionProvider,
+  AuthResult,
+} from "@slide-to-pay/react";
+import {
+  assertSuccessfulAuth,
+  assertValidActionIntent,
+} from "@slide-to-pay/react";
+
+export class EmailSendProvider implements ActionProvider {
+  constructor(private readonly endpoint: string) {}
 
   async requestAuthorization(
     intent: ActionIntent,
-    auth: AuthResult
+    auth: AuthResult,
   ): Promise<ActionAuthorization> {
-    if (!auth.success) throw new Error("Auth required");
+    assertValidActionIntent(intent);
+    assertSuccessfulAuth(auth);
 
-    const res = await fetch(this.opts.endpoint, {
+    if (typeof auth.assertion === "undefined") {
+      throw new Error("Authentication assertion is required");
+    }
+
+    const response = await fetch(this.endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        action: intent.kind,
         subject: intent.subject,
         auth_assertion: auth.assertion,
         requested_by: intent.requestedBy,
       }),
     });
 
-    if (!res.ok) throw new Error(`Authorization failed: ${res.status}`);
-    const data = await res.json();
+    if (!response.ok) {
+      throw new Error(`Authorization failed: ${response.status}`);
+    }
 
+    const data = await response.json();
     return {
       grantId: data.grant_id,
-      scope: { action: "send_message", recipients: data.recipients },
+      scope: {
+        action: "send_message",
+        recipients: data.recipients,
+      },
       expiresAt: data.expires_at,
     };
   }
 }
 ```
 
-Good candidates: send message/email, sign document, share credential/API key, publish post, cancel booking, temporary calendar/inbox access.
+For a production provider, also validate the response schema, require an unexpired grant, and ensure the backend has independently bound the grant to the exact intent.
 
----
+## Server-side security requirements
 
-## Server-side verification (required)
+The client-rendered intent is not a security assertion. A secure backend integration should:
 
-`WebAuthnProvider` calls two endpoints **you** own:
+1. Generate a fresh, unpredictable WebAuthn challenge server-side.
+2. Bind the challenge to the authenticated user, session, origin, relying-party ID, and canonical action intent.
+3. Verify the assertion using a standards-compliant WebAuthn relying-party implementation such as [`@simplewebauthn/server`](https://simplewebauthn.dev/).
+4. Reject expired, replayed, or already-consumed challenges.
+5. Independently derive or verify the merchant, amount, recipients, resource, action, and agent identity.
+6. Issue a least-privilege, short-lived grant for one action or resource.
+7. Enforce single-use or idempotent consumption of the grant.
+8. Apply authorization, CSRF protection where cookie credentials are used, rate limits, and audit logging on the backend.
+9. Avoid logging raw WebAuthn assertions, payment credentials, or unnecessary personal data.
+10. Keep secret payment-provider credentials exclusively on the server.
 
-| Endpoint | Job |
-|----------|-----|
-| `challengeEndpoint` | Generate a fresh WebAuthn challenge server-side. Return `publicKeyOptions`. |
-| `verifyEndpoint` | Verify the assertion signature server-side. Only then treat auth as successful. |
+See [SECURITY.md](./SECURITY.md) for the project security policy and disclosure process.
 
-Do **not** trust a client-only WebAuthn check. Use a standard relying-party library such as [`@simplewebauthn/server`](https://simplewebauthn.dev/).
+## Accessibility
 
-For Stripe, `StripeSPTProvider` posts to your backend, which calls Stripe's spend-request API **with your secret key**. Never call Stripe SPT endpoints from client code. See [Stripe agentic commerce docs](https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens).
+The component supports keyboard activation, live status announcements, pointer capture, touch interaction, responsive sizing, and reduced-motion preferences. The gesture must never be the only way to authorize an action.
 
----
+Host applications should also ensure that:
 
-## Native (iOS / Android)
-
-The React component is the web reference. The **interfaces** (`AuthProvider`, `ActionProvider`) are what you reimplement per platform.
-
-See **[NATIVE.md](./NATIVE.md)** for LAContext (iOS) and BiometricPrompt (Android) sketches. The slide gesture itself is a plain drag-to-threshold interaction with no special platform requirement.
-
----
+- The intent text clearly identifies the recipient, amount or consequence, and requesting agent.
+- Focus indicators remain visible against the host theme.
+- The host application provides a non-drag equivalent that invokes the same authentication flow.
+- Long subjects and descriptions wrap without hiding the action scope.
+- Dynamic text sizing does not clip amounts or destructive consequences.
 
 ## Theming
 
-The component uses CSS custom properties so host apps can match their design system:
+The component uses CSS custom properties for its default visual tokens:
 
 ```css
 :root {
@@ -232,69 +494,72 @@ The component uses CSS custom properties so host apps can match their design sys
 }
 ```
 
-Pass `className` for additional host styling. The control is responsive and supports reduced-motion preferences.
+Pass `className` to the root element for host-specific styling. The current component uses inline layout styles and CSS variables for the primary surface colors.
 
----
+## Native platforms
 
-## Accessibility
+The React component is the web reference implementation. Native applications should preserve the same trust model while implementing the interfaces with platform APIs:
 
-- Role `slider` with live `aria-valuenow` / `aria-valuetext`
-- Keyboard: focus the track and press **Space** or **Enter** to authorize
-- `aria-live` status region for success / decline / error
-- Pointer capture + touch-action for reliable mobile dragging
+- iOS: `LAContext` and Face ID or Touch ID.
+- Android: `BiometricPrompt` with a strong biometric policy.
+- Native gesture: a drag-to-threshold interaction with an accessible confirm alternative.
 
----
+See [NATIVE.md](./NATIVE.md) for integration sketches.
 
-## Demo
+## Development
+
+The package uses TypeScript, Vite, and Vitest.
+
+```bash
+npm install
+npm run typecheck
+npm run build
+npm test
+npm run check
+```
+
+`npm run check` runs typechecking, the production library build, and the security regression tests. The demo has its own dependencies and build command:
 
 ```bash
 cd examples/demo
 npm install
-npm run dev
+npm run build
 ```
 
-Two scenarios (payment + file delete) share the same component and biometric gate. The demo imports mock providers from the dedicated demo entry point; these providers are for local development only and must not be used in production.
+## Project structure
 
----
+```text
+agent-consent-ui/
+├── src/
+│   ├── SlideToAuthorize.tsx      # Main consent component
+│   ├── SlideToPay.tsx            # Deprecated payment wrapper
+│   ├── types.ts                  # Public contracts and types
+│   ├── security.ts               # Defensive validation helpers
+│   ├── index.ts                  # Production package exports
+│   ├── demo.ts                   # Explicit demo-only exports
+│   └── providers/                # WebAuthn, Stripe, delete, and mock adapters
+├── tests/
+│   └── security.test.ts          # Security helper regression tests
+├── examples/demo/                # Vite demonstration application
+├── SECURITY.md
+├── CONTRIBUTING.md
+├── NATIVE.md
+├── CHANGELOG.md
+└── LICENSE
+```
 
-## What this is not
+## Compatibility and naming
 
-- Not a new payment rail. It sits on top of whatever backend a given action needs.
-- Not a way to skip user confirmation. Every completed slide still requires a real platform-verified biometric.
-- Not production-hardened end-to-end. Treat the `Demo*Provider` classes as illustrations. Wire real server verification and grant issuance before shipping.
+The repository name is `agent-consent-ui`, while the published package identity currently remains `@slide-to-pay/react` for compatibility with the original v0.2.0 package. A future breaking release can migrate to a neutral npm scope after a formal deprecation period.
 
----
+`SlideToPay`, `PurchaseIntent`, `TokenProvider`, and `AuthorizationToken` are deprecated compatibility APIs. New code should use `SlideToAuthorize`, `ActionIntent`, `ActionProvider`, and `ActionAuthorization`.
 
-## API surface
+## What this project is not
 
-| Export | Purpose |
-|--------|---------|
-| `SlideToAuthorize` | Main component |
-| `SlideToPay` | Deprecated payments-only wrapper |
-| `WebAuthnProvider` | Production WebAuthn adapter |
-| `StripeSPTProvider` | Stripe Shared Payment Token example |
-| `DeleteActionProvider` | Non-payment ActionProvider example |
-| `assertValidActionIntent` / `assertValidAuthorization` | Defensive client-side validation helpers |
-| `@slide-to-pay/react/demo` — `DemoAuthProvider` / `DemoActionProvider` / `DemoTokenProvider` | Local demos only; not part of the default entry point |
-| Types: `ActionIntent`, `AuthProvider`, `ActionProvider`, `ActionAuthorization`, … | |
+This is not a payment rail, wallet, policy engine, identity provider, or complete authorization backend. It does not store card numbers, verify WebAuthn assertions on the server, execute actions, or guarantee that an action can be undone.
 
----
+It is an open-source client-side consent interaction and provider-contract reference implementation. The host application and backend must supply the actual identity, policy, verification, grant issuance, and action execution controls.
 
 ## License
 
-MIT. Use it, fork it, put it in front of whoever you think should see it.
-
-
-## Security boundary
-
-This package provides a consent interaction and provider interfaces; it does not make a client application secure by itself. The slider carries no authorization weight. Production systems must use a platform-owned authenticator and a server-side authorization service that independently verifies the exact action intent.
-
-Before issuing a grant, the backend must bind the authenticated user, agent identity, action kind, subject, consequence, amount or resource scope, challenge, origin, expiration, and one-time-use policy. It must reject replayed or expired challenges and must not trust amount, merchant, recipients, file names, or permissions solely because they were rendered by the client.
-
-The default package entry point excludes demo providers. For local examples only, import them from `@slide-to-pay/react/demo`. Demo providers use simulated grants and do not perform production-grade server verification.
-
-See [SECURITY.md](./SECURITY.md) for the threat model and vulnerability-reporting process.
-
-## Open-source development
-
-Run `npm install` followed by `npm run check` to typecheck and build the library. Run `npm run dev` to start the Vite demo. Contributions that change authentication, grant scope, provider contracts, or retry behavior should include tests and documentation updates; see [CONTRIBUTING.md](./CONTRIBUTING.md).
+MIT. See [LICENSE](./LICENSE).
