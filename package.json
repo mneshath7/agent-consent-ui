@@ -1,0 +1,72 @@
+{
+  "name": "@slide-to-pay/react",
+  "version": "0.2.0",
+  "description": "Slide-to-confirm + platform biometric for authorizing consequential AI-agent actions (payments, deletes, sends, signatures…). One gesture, pluggable AuthProvider + ActionProvider. Works across any app that implements the interfaces.",
+  "license": "MIT",
+  "author": "slide-to-authorize contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mneshath7/agent-consent-ui.git"
+  },
+  "homepage": "https://github.com/mneshath7/agent-consent-ui#readme",
+  "bugs": {
+    "url": "https://github.com/mneshath7/agent-consent-ui/issues"
+  },
+  "keywords": [
+    "agentic-commerce",
+    "ai-agents",
+    "authorization",
+    "webauthn",
+    "biometric",
+    "stripe",
+    "shared-payment-tokens",
+    "slide-to-confirm",
+    "react",
+    "human-in-the-loop"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./demo": {
+      "types": "./dist/demo.d.ts",
+      "import": "./dist/demo.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "NATIVE.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^4.1.11"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "vite examples/demo",
+    "prepublishOnly": "npm run check",
+    "check": "npm run typecheck && npm run build && npm test",
+    "test": "vitest run"
+  }
+}
