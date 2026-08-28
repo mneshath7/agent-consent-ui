@@ -563,3 +563,28 @@ It is an open-source client-side consent interaction and provider-contract refer
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+
+## Express backend example
+
+The repository includes a Node.js/Express example under [`examples/server`](./examples/server). It uses [`@simplewebauthn/server`](https://simplewebauthn.dev/docs/packages/server) to generate short-lived registration and authentication ceremonies, verify assertions, bind authentication to the exact action intent, and return an opaque verified assertion to the client provider.
+
+```bash
+cd examples/server
+cp .env.example .env
+# Set a long random SESSION_SECRET in .env
+npm install
+npm run dev
+```
+
+The example exposes these routes:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/webauthn/registration/challenge` | Generate passkey registration options |
+| `POST /api/webauthn/registration/verify` | Verify and store a passkey credential |
+| `POST /api/webauthn/challenge` | Generate an authentication challenge bound to an intent |
+| `POST /api/webauthn/verify` | Consume and verify the assertion and intent binding |
+| `GET /health` | Liveness check |
+
+The example uses in-memory storage and a development-only user selector. It is a reference implementation, not a drop-in production backend. Replace the user lookup with your authenticated session middleware, replace the in-memory store with durable transactional storage, and connect the verified result to an action-specific grant issuer. See [`examples/server/README.md`](./examples/server/README.md) and [`SECURITY.md`](./SECURITY.md) before adapting it for production.
