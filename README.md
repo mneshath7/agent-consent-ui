@@ -33,7 +33,7 @@ The package declares React and React DOM as peer dependencies. Your application 
 
 ### Install directly from GitHub
 
-The repository is available at [github.com/mneshath7/agent-consent-ui](https://github.com/mneshath7/agent-consent-ui). Until a release is published to npm, an application can install the repository directly:
+The repository is available at [github.com/mneshath7/agent-consent-ui](https://github.com/neshath/agent-consent-ui). Until a release is published to npm, an application can install the repository directly:
 
 ```bash
 npm install github:mneshath7/agent-consent-ui
