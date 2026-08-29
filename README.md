@@ -1,12 +1,12 @@
-# Agent Consent UI
+# Agent Consent 
 
 A React and TypeScript confirmation primitive for consequential actions initiated by AI agents.
 
-`agent-consent-ui` provides a deliberate slide interaction, a pluggable platform-authentication boundary, and action-specific authorization providers. It can be used for payments, file deletion, message sending, document signing, publishing, booking cancellation, deployments, and other actions that a user should explicitly approve.
+`agent-consent` provides a deliberate slide interaction, a pluggable platform-authentication boundary, and action-specific authorization providers. It can be used for payments, file deletion, message sending, document signing, publishing, booking cancellation, deployments, and other actions that a user should explicitly approve.
 
 > **Security principle:** the slider is only intent capture. It does not provide security by itself. Production authorization depends on a platform-owned authenticator and a server that independently verifies the exact intent before issuing a narrow grant.
 
-The current npm-compatible package name is `@slide-to-pay/react`. The repository uses the broader `agent-consent-ui` identity so the project is not limited to payments.
+The current npm-compatible package name is `@slide-to-pay/react`. The repository uses the broader `agent-consent` identity so the project is not limited to payments.
 
 ## Features
 
@@ -33,10 +33,10 @@ The package declares React and React DOM as peer dependencies. Your application 
 
 ### Install directly from GitHub
 
-The repository is available at [github.com/neshath/agent-consent-ui](https://github.com/neshath/agent-consent-ui). Until a release is published to npm, an application can install the repository directly:
+The repository is available at [github.com/neshath/agent-consent-ui](https://github.com/neshath/agent-consent). Until a release is published to npm, an application can install the repository directly:
 
 ```bash
-npm install github:neshath/agent-consent-ui
+npm install github:neshath/agent-consent
 ```
 
 For production applications, prefer a tagged package release so dependency resolution is reproducible.
@@ -529,7 +529,7 @@ npm run build
 ## Project structure
 
 ```text
-agent-consent-ui/
+agent-consent/
 ├── src/
 │   ├── SlideToAuthorize.tsx      # Main consent component
 │   ├── SlideToPay.tsx            # Deprecated payment wrapper
@@ -550,7 +550,7 @@ agent-consent-ui/
 
 ## Compatibility and naming
 
-The repository name is `agent-consent-ui`, while the published package identity currently remains `@slide-to-pay/react` for compatibility with the original v0.2.0 package. A future breaking release can migrate to a neutral npm scope after a formal deprecation period.
+The repository name is `agent-consent`, while the published package identity currently remains `@slide-to-pay/react` for compatibility with the original v0.2.0 package. A future breaking release can migrate to a neutral npm scope after a formal deprecation period.
 
 `SlideToPay`, `PurchaseIntent`, `TokenProvider`, and `AuthorizationToken` are deprecated compatibility APIs. New code should use `SlideToAuthorize`, `ActionIntent`, `ActionProvider`, and `ActionAuthorization`.
 
